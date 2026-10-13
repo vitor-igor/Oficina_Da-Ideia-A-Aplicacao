@@ -337,46 +337,70 @@ A correspondência entre o diagrama e o código é:
 - **`db.ForeignKey`** cria a referência entre tabelas no banco.
 - **`db.relationship`** permite navegar entre objetos relacionados pelo Python. Ele não cria, sozinho, uma coluna ou chave estrangeira: a estrutura física do vínculo é definida pela chave estrangeira ou por uma tabela associativa.
 
-### Exemplo ilustrativo: uma relação um-para-muitos
+### Exemplo ilustrativo
 
-O exemplo abaixo usa nomes genéricos para mostrar como um registro principal pode estar relacionado a várias pessoas. **Ele demonstra apenas uma cardinalidade; não copie essa estrutura automaticamente.** Confira o diagrama do seu contexto, pois a posição da chave estrangeira e o tipo de relacionamento dependem dele.
+O exemplo abaixo demonstra um relacionamento um-para-um opcional entre `Cooperado` e `Usuario`. Cada usuário pode estar associado a, no máximo, um cooperado, e cada cooperado pode estar associado a, no máximo, um usuário. Essa estrutura é apenas um exemplo: consulte o diagrama do seu contexto para identificar a cardinalidade correta.
 
 ```python
 from backend.extensions import db
 
 
-class EntidadePrincipal(db.Model):
-    __tablename__ = "entidade_principal"
+class Cooperado(db.Model):
+    __tablename__ = "cooperado"
 
-    id = db.Column(db.Integer, primary_key=True)
-    nome = db.Column(db.String(100), nullable=False)
+    id = db.Column(
+        db.String(36),
+        primary_key=True
+    )
 
-    pessoas = db.relationship(
-        "PessoaRelacionada",
-        back_populates="principal",
+    nome = db.Column(
+        db.String(150),
+        nullable=False
+    )
+
+    usuario = db.relationship(
+        "Usuario",
+        back_populates="cooperado",
+        uselist=False
     )
 
 
-class PessoaRelacionada(db.Model):
-    __tablename__ = "pessoa_relacionada"
+class Usuario(db.Model):
+    __tablename__ = "usuario"
 
     id = db.Column(db.Integer, primary_key=True)
-    nome = db.Column(db.String(100), nullable=False)
-    principal_id = db.Column(
-        db.Integer,
-        db.ForeignKey("entidade_principal.id"),
+    nome = db.Column(db.String(150), nullable=True)
+    email = db.Column(
+        db.String(150),
         nullable=False,
+        unique=True
+    )
+    senha = db.Column(db.String(256), nullable=False)
+    status = db.Column(
+        db.Boolean,
+        default=True,
+        nullable=False
     )
 
-    principal = db.relationship(
-        "EntidadePrincipal",
-        back_populates="pessoas",
+    cooperado_id = db.Column(
+        db.String(36),
+        db.ForeignKey("cooperado.id"),
+        nullable=True,
+        unique=True
+    )
+
+    cooperado = db.relationship(
+        "Cooperado",
+        back_populates="usuario",
+        uselist=False
     )
 ```
 
-Neste exemplo, a chave estrangeira `principal_id` fica na tabela `pessoa_relacionada`, pois cada pessoa aponta para uma entidade principal. A mesma entidade principal pode ser referenciada por várias pessoas, formando uma relação um-para-muitos.
+A coluna `cooperado_id` é a chave estrangeira armazenada na tabela `usuario`, estabelecendo o vínculo com a tabela `cooperado`. Como possui `unique=True`, um mesmo cooperado não pode ser associado a vários usuários. Já `nullable=True` permite que um usuário exista sem estar associado a um cooperado.
 
-Os dois `db.relationship` permitem navegar nos dois sentidos: `principal.pessoas` fornece a coleção de pessoas relacionadas; `pessoa.principal` fornece a entidade principal daquele registro. Os valores de `back_populates` devem corresponder aos nomes dos atributos definidos na outra classe.
+Os dois atributos `db.relationship()` permitem navegar entre os objetos relacionados no Python. Assim, `usuario.cooperado` permite acessar o cooperado associado a um usuário, enquanto `cooperado.usuario` permite acessar o usuário associado a um cooperado. O parâmetro `back_populates` conecta esses atributos, e `uselist=False` indica que o relacionamento retorna um único objeto, em vez de uma coleção.
+
+Observe a diferença entre o relacionamento e a chave estrangeira: `cooperado_id` é uma coluna real no banco de dados; `cooperado` e `usuario` são atributos do ORM que facilitam o acesso aos objetos relacionados. A cardinalidade, a obrigatoriedade e a localização da chave estrangeira devem seguir o diagrama de dados do contexto escolhido.
 
 ### Como representar outras cardinalidades?
 
