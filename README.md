@@ -326,9 +326,9 @@ A correspondência entre o diagrama e o código é:
 | Obrigatoriedade | `nullable=False` para impedir `NULL`; outras restrições podem ser necessárias conforme a regra. |
 
 
-### O que cada elemento faz?
+### O que cada elemento do SQL-Alchemy faz?
 
-- **`db.Model`** é a classe-base dos models do Flask-SQLAlchemy. Cada classe representa uma entidade persistida.
+- **`db.Model`** é a classe-base dos models. Cada classe representa uma entidade persistida.
 - **`__tablename__`** define o nome da tabela no banco. Use um nome consistente e referencie esse nome nas chaves estrangeiras.
 - **`db.Column`** declara uma coluna. O tipo (`db.String`, `db.Text`, `db.Integer`, `db.Date` etc.) deve combinar com a informação armazenada.
 - **`primary_key=True`** define a chave primária que identifica cada registro.
@@ -655,4 +655,369 @@ Esta lista é uma verificação de conclusão. Se não conseguiu concluir ou cor
 
 ---
 
+# Etapa 3 — Interface web e integração com a API
 
+Nesta etapa, você transformará os requisitos em telas e conectará a interface aos dados persistidos no backend. O frontend **não acessa o PostgreSQL diretamente**: ele envia requisições HTTP à API Flask, recebe respostas e apresenta os dados à pessoa usuária.
+
+O projeto utilizará Next.js, React, TypeScript e Tailwind CSS. Para acelerar a construção da interface, a oficina recomenda componentes do shadcn/ui, que são adicionados ao próprio projeto e podem ser adaptados conforme necessário.
+
+## 3.1. Confirmar os pré-requisitos
+
+Antes de criar a interface, confirme que a API está funcionando e que você consegue consultar seus endpoints pelo Swagger. Se você recuperou o checkpoint `<contexto>-api`, prepare e valide a cópia recuperada conforme a seção de checkpoints no início deste guia.
+
+Confira Node.js e npm:
+
+```bash
+node --version
+npm --version
+```
+
+O Next.js usado nesta oficina exige Node.js 20.9 ou superior. Se a API estiver configurada em outra porta, anote o endereço correto; ele será utilizado na configuração de integração.
+
+## 3.2. Criar o frontend no mesmo projeto local
+
+Volte à raiz do projeto, isto é, à pasta que contém `pyproject.toml`, `compose.yaml` e `src/backend/`. Crie nela a pasta `frontend/` usando o gerador do Next.js:
+
+```bash
+npx create-next-app@latest frontend --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --use-npm --disable-git
+```
+
+A opção `--disable-git` evita que o gerador inicialize um repositório Git dentro da pasta `frontend/`. O projeto inteiro continua sendo uma pasta local criada do zero; Git só é usado se for necessário recuperar um checkpoint.
+
+Entre no frontend e inicie o servidor de desenvolvimento:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Abra o endereço mostrado pelo terminal, normalmente `http://localhost:3000`. 
+
+A estrutura inicial mais relevante será semelhante a esta:
+
+```text
+frontend/
+├── package.json
+├── next.config.ts
+├── .env.local
+└── src/
+    ├── app/ 
+    ├── components/ 
+    └── lib/ 
+```
+
+Os arquivos podem variar conforme a versão do gerador. Não substitua configurações que já existam sem entender para que servem.
+
+## 3.3. Planejar telas a partir dos requisitos
+
+Antes de programar, transforme os requisitos da ficha técnica em ações que alguém poderá realizar na interface. Em geral, pense em uma listagem da entidade principal, uma visualização de detalhe com suas relações e formulários para criação ou edição quando a API oferecer essas operações.
+
+| Necessidade | Possível elemento da interface | O que verificar na API |
+|---|---|---|
+| Consultar uma coleção | Lista ou tabela | Endpoint `GET` de listagem. |
+| Consultar um registro e suas relações | Página de detalhe ou modal | Endpoint `GET` individual e formato das relações. |
+| Cadastrar um registro | Formulário | Endpoint `POST` e schema de entrada. |
+| Atualizar um registro | Formulário de edição | Endpoint `PUT`, se disponível. |
+| Remover um registro | Ação com confirmação | Endpoint `DELETE`, se disponível. |
+| Associar registros | Select ou formulário específico | Como a API recebe os identificadores. |
+
+Esses são padrões, não uma exigência de reproduzir um único layout. Nem toda entidade oferece CRUD completo; consulte a ficha técnica e o Swagger antes de criar botões ou formulários.
+
+Planeje também os estados da tela: carregamento, lista vazia, sucesso e erro. Uma lista vazia não é a mesma coisa que uma falha ao consultar a API.
+
+**Como conferir:** cada tela ou ação planejada deve corresponder a um requisito e ter suporte no contrato da API.
+
+## 3.4. Reaproveitar componentes prontos
+
+Para reduzir o tempo gasto com estilização, utilize os componentes de [shadcn/ui](https://ui.shadcn.com/). Após criar o projeto Next.js, inicialize a biblioteca seguindo a [documentação oficial de instalação para Next.js](https://ui.shadcn.com/docs/installation/next):
+
+```bash
+npx shadcn@latest init
+```
+
+Depois, adicione somente os componentes necessários. Para começar, uma seleção pequena costuma ser suficiente:
+
+```bash
+npx shadcn@latest add button input table dialog
+```
+
+Se o seu contexto precisar de campos longos, seletores, abas ou mensagens, adicione esses componentes quando chegar a essa necessidade, por exemplo:
+
+```bash
+npx shadcn@latest add textarea select alert-dialog tabs sonner skeleton
+```
+
+Não é obrigatório instalar todos os componentes: escolha os que realmente serão usados. O comando adiciona arquivos ao projeto e pode solicitar dependências e configurações; leia as mensagens e preserve os auxiliares necessários.
+
+| Componente ou padrão | Para que serve | Documentação |
+|---|---|---|
+| Button | Ações e envio de formulários | [Button](https://ui.shadcn.com/docs/components/button) |
+| Input | Campo de uma linha | [Input](https://ui.shadcn.com/docs/components/input) |
+| Textarea | Biografia, descrição ou resumo | [Textarea](https://ui.shadcn.com/docs/components/textarea) |
+| Select | Escolher uma opção ou registro relacionado | [Select](https://ui.shadcn.com/docs/components/select) |
+| Table | Listar registros em linhas e colunas | [Table](https://ui.shadcn.com/docs/components/table) |
+| Dialog | Formulário ou detalhe em modal | [Dialog](https://ui.shadcn.com/docs/components/dialog) |
+| Alert Dialog | Confirmar exclusão ou outra ação destrutiva | [Alert Dialog](https://ui.shadcn.com/docs/components/alert-dialog) |
+| Tabs | Separar seções da aplicação | [Tabs](https://ui.shadcn.com/docs/components/tabs) |
+| Toast | Mensagens breves de sucesso ou falha | [Sonner](https://ui.shadcn.com/docs/components/sonner) |
+| Skeleton | Indicar carregamento | [Skeleton](https://ui.shadcn.com/docs/components/skeleton) |
+
+Para uma oficina curta, priorize controles de formulário, listagem, detalhes e confirmação. Estados simples podem ser comunicados com texto, sem exigir componentes extras.
+
+Outras bibliotecas e galerias, como [Untitled UI](https://www.untitledui.com/react/components) e [21st.dev](https://21st.dev/), podem servir de inspiração. Seus exemplos não fazem automaticamente parte do projeto: confira código, dependências e licença antes de utilizá-los. Para manter uma base comum entre os quatro contextos, prefira a biblioteca indicada neste guia.
+
+**Como conferir:** antes de importar um componente, confirme que ele existe em `src/components/ui/` ou adicione-o intencionalmente. A aplicação deve continuar compilando.
+
+## 3.5. Organizar a interface
+
+Mantenha cada parte responsável por uma tarefa clara:
+
+| Local sugerido | Responsabilidade |
+|---|---|
+| `src/app/` | Páginas, rotas e layout. |
+| `src/components/` | Componentes específicos da aplicação que podem ser reutilizados. |
+| `src/components/ui/` | Componentes visuais adicionados pelo shadcn/ui. |
+| `src/lib/` | Funções auxiliares, tipos e chamadas HTTP. |
+
+Não crie muitas pastas antes de precisar delas. Comece pelo fluxo principal e extraia componentes quando isso deixar o código mais claro.
+
+No App Router do Next.js, componentes são renderizados no servidor por padrão. Partes que usam estado React, efeitos, eventos de clique ou APIs do navegador precisam ser componentes de cliente, normalmente indicados por `"use client"` no início do arquivo.
+
+O fluxo de uma ação será:
+
+```text
+ação da pessoa
+    ↓
+componente da interface
+    ↓
+requisição HTTP
+    ↓
+API Flask
+    ↓
+resposta HTTP/JSON
+    ↓
+atualização da interface
+```
+
+## 3.6. Conectar o frontend à API
+
+Esta é a parte que faz as telas deixarem de ser apenas visuais e passarem a trabalhar com os dados da aplicação. A oficina utiliza um **proxy do Next.js**: o navegador chama o próprio frontend, e o Next.js encaminha a requisição ao Flask. Assim, as chamadas da interface não precisam usar diretamente a origem da API no navegador.
+
+### Passo 1 — Iniciar a API
+
+Abra um terminal na raiz do projeto, onde ficam `pyproject.toml` e `src/backend/`. Com o PostgreSQL ativo e as migrações aplicadas, inicie o Flask:
+
+```bash
+uv run flask --app backend run --debug --host 127.0.0.1 --port 5000
+```
+
+Mantenha o terminal aberto. A documentação deve estar em `http://127.0.0.1:5000/docs`. Abra-a, encontre uma rota `GET` de listagem do seu contexto e anote o caminho exato, incluindo eventuais prefixos.
+
+### Passo 2 — Configurar o proxy do Next.js
+
+Em outro terminal, abra `frontend/next.config.ts`. Preserve as configurações existentes e acrescente uma função `rewrites()` equivalente a esta:
+
+```typescript
+import type { NextConfig } from "next";
+
+const backendUrl = process.env.BACKEND_URL ?? "http://127.0.0.1:5000";
+
+const nextConfig: NextConfig = {
+  async rewrites() {
+    return [
+      {
+        source: "/backend/:path*",
+        destination: `${backendUrl}/:path*`,
+      },
+    ];
+  },
+};
+
+export default nextConfig;
+```
+
+Se `next.config.ts` já possuir `nextConfig`, não crie uma segunda variável nem apague configurações necessárias: incorpore somente a função `rewrites()` ao objeto existente. Essa regra encaminha `/backend/ROTA` para `ROTA` no Flask; o prefixo `/backend` é usado pelo proxy e não faz parte da rota original da API.
+
+### Passo 3 — Informar o endereço do backend
+
+Na raiz de `frontend/`, ao lado de `package.json`, crie `.env.local`:
+
+```dotenv
+BACKEND_URL=http://127.0.0.1:5000
+```
+
+Ajuste a URL caso o Flask esteja em outro endereço ou porta. Essa variável é lida pelo Next.js no servidor; não use o prefixo `NEXT_PUBLIC_`.
+
+Se alterar `next.config.ts` ou `.env.local`, pare o servidor Next.js com `Ctrl+C` e inicie-o novamente com `npm run dev` para carregar a configuração.
+
+### Passo 4 — Testar o proxy antes de escrever a tela
+
+Suponha apenas como exemplo que o Swagger mostre `GET /<entidade>`. Com o Next.js executando na porta 3000, abra no navegador:
+
+`http://localhost:3000/backend/<entidade>`
+
+Para o seu projeto, substitua `<entidade>` pela rota real de listagem. O caminho chamado pelo navegador começa com `/backend/`; o destino no Flask não tem esse prefixo. A resposta via proxy deve corresponder à resposta da rota acessada diretamente no Swagger.
+
+Se a chamada falhar, confira nesta ordem:
+
+1. O Flask está em execução no terminal do backend?
+2. A rota funciona diretamente pelo Swagger?
+3. `BACKEND_URL` aponta para o endereço e a porta corretos?
+4. O arquivo `next.config.ts` contém a regra de proxy e o servidor Next foi reiniciado?
+5. O caminho usado depois de `/backend/` é exatamente o caminho documentado na API?
+
+### Passo 5 — Fazer uma chamada HTTP pelo frontend
+
+Depois de testar o proxy, implemente no frontend uma chamada `fetch` para a rota real. O exemplo abaixo mostra o padrão de leitura; substitua `ROTA_REAL` e adapte a resposta ao JSON que sua API realmente devolve:
+
+```typescript
+const response = await fetch("/backend/ROTA_REAL", {
+  cache: "no-store",
+});
+
+if (!response.ok) {
+  throw new Error(`A API respondeu com HTTP ${response.status}`);
+}
+
+const dados = await response.json();
+```
+
+Receber `dados` não os coloca automaticamente na tela. Em React, normalmente você guarda o resultado em estado e o utiliza para renderizar a lista, tabela ou detalhe. Os nomes e tipos dos campos precisam seguir a resposta observada no Swagger, não este exemplo.
+
+Para ver o fluxo completo de leitura em React, um componente de cliente pode seguir este padrão mínimo. `id` e `nome` são campos ilustrativos: substitua-os pelo formato real do JSON devolvido pela sua API.
+
+```tsx
+"use client";
+
+import { useEffect, useState } from "react";
+
+type Registro = { id: number; nome: string };
+
+export default function ListaExemplo() {
+  const [registros, setRegistros] = useState<Registro[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function carregar() {
+      try {
+        const response = await fetch("/backend/ROTA_REAL", { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const dados = (await response.json()) as Registro[];
+        setRegistros(dados);
+      } catch {
+        setErro("Não foi possível carregar os registros.");
+      } finally {
+        setCarregando(false);
+      }
+    }
+    void carregar();
+  }, []);
+
+  if (carregando) return <p>Carregando...</p>;
+  if (erro) return <p role="alert">{erro}</p>;
+  if (registros.length === 0) return <p>Nenhum registro encontrado.</p>;
+
+  return (
+    <ul>
+      {registros.map((registro) => (
+        <li key={registro.id}>{registro.nome}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+Esse exemplo demonstra os pontos essenciais: fazer a chamada HTTP, verificar o status, converter a resposta JSON, guardar os dados em estado React e renderizar a lista. Se a API devolver um objeto que contém uma lista dentro de uma propriedade, ajuste a leitura; não presuma que toda resposta é um array.
+
+Para enviar dados, o padrão é semelhante, mas o método e o corpo devem corresponder ao contrato da API:
+
+```typescript
+const response = await fetch("/backend/ROTA_REAL", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(dadosDoFormulario),
+});
+
+if (!response.ok) {
+  throw new Error(`A API respondeu com HTTP ${response.status}`);
+}
+```
+
+`dadosDoFormulario` precisa conter os campos aceitos pelo schema de entrada. Após a operação, apresente a confirmação e atualize ou recarregue os dados da interface. Em operações `DELETE` que retornem `204 No Content`, não tente ler a resposta com `response.json()`, pois ela não contém corpo.
+
+Para chamadas repetidas, concentre o acesso HTTP em funções dentro de `src/lib/` em vez de espalhar a mesma lógica por vários componentes.
+
+## 3.7. Tipos, formulários e relacionamentos
+
+Consulte a ficha técnica e o Swagger/OpenAPI antes de criar tipos TypeScript ou formulários. Respeite os nomes dos campos, tipos, datas, campos obrigatórios/opcionais e valores nulos definidos pela API.
+
+Os dados enviados e recebidos podem ter estruturas diferentes. Um identificador gerado pelo servidor, por exemplo, normalmente aparece na resposta, mas não é enviado na criação. Se a API devolver uma lista dentro de uma propriedade de um objeto, não a trate como se a resposta inteira fosse um array.
+
+Em formulários relacionados, carregue as opções necessárias e envie os identificadores no formato esperado. Depois de uma criação ou edição bem-sucedida, atualize a interface para refletir o dado persistido. Em caso de falha, mostre uma mensagem compreensível e preserve os dados válidos que já estavam na tela.
+
+Não presuma que todos os recursos aceitam edição ou exclusão, que todas as respostas possuem a mesma estrutura ou que os campos de um contexto servem para os outros. A ficha técnica explica a necessidade; o contrato da API mostra o que está disponível.
+
+## 3.8. Testar o fluxo completo
+
+Com backend e frontend executando em terminais separados, percorra a sequência principal do seu contexto:
+
+1. Abra a interface e confirme que a página carrega.
+2. Confira se a listagem obtém dados da API.
+3. Crie um registro, se essa operação estiver prevista.
+4. Abra o detalhe e confira os dados e relacionamentos exigidos.
+5. Atualize ou remova um registro somente se a API oferecer essas operações; confirme exclusões antes de enviá-las.
+6. Observe os estados de carregamento, lista vazia, sucesso e erro.
+7. Se algo falhar, examine a requisição e a resposta no navegador e compare com o Swagger.
+8. Recarregue a página e confirme que os dados persistidos continuam disponíveis.
+
+Uma operação não está integrada só porque o botão responde a um clique. A ação deve produzir uma requisição válida, a API deve responder de acordo com o contrato e a interface deve apresentar o resultado coerentemente.
+
+## 3.9. Conferência final da etapa web
+
+Esta é uma lista de verificação da conclusão da etapa, **não um checkpoint Git**. Não existe branch de recuperação para o frontend.
+
+- [ ] O frontend funciona dentro da pasta `frontend/` do projeto local.
+- [ ] As telas e ações correspondem aos requisitos obrigatórios da ficha.
+- [ ] Os tipos, formulários e chamadas seguem o contrato real da API.
+- [ ] A interface consulta a API por HTTP e não acessa diretamente o banco de dados.
+- [ ] O proxy do Next.js encaminha as requisições ao Flask.
+- [ ] As operações disponíveis funcionam e os estados de carregamento, erro, sucesso e ausência de dados são compreensíveis.
+- [ ] Os relacionamentos são exibidos de forma coerente com os requisitos.
+- [ ] O fluxo principal foi percorrido no navegador e os dados continuam persistidos após recarregar a página.
+
+---
+
+## Visão final: o que deve estar funcionando
+
+Ao final da oficina, a pasta do projeto deverá reunir as três partes da aplicação:
+
+```text
+oficina-eventos/
+├── pyproject.toml
+├── uv.lock
+├── compose.yaml
+├── .env
+├── .env.example
+├── migrations/
+├── src/
+│   └── backend/        # Flask, models e API
+└── frontend/           # Next.js, React e interface web
+```
+
+O objetivo não é produzir um sistema de produção completo, mas chegar a uma aplicação pequena e integrada: os dados são persistidos no PostgreSQL, as regras e operações são expostas pela API Flask e a interface web permite realizar o fluxo principal do contexto escolhido.
+
+A mensagem central da oficina é que o domínio muda, mas muitas decisões de engenharia — organização dos dados, separação de responsabilidades, definição de contratos, tratamento de erros e integração entre camadas — podem ser reaproveitadas entre aplicações.
+
+## Referências técnicas
+
+- [uv — documentação](https://docs.astral.sh/uv/)
+- [Flask — documentação](https://flask.palletsprojects.com/)
+- [Flask-SQLAlchemy — documentação](https://flask-sqlalchemy.palletsprojects.com/)
+- [Flask-Migrate — documentação](https://flask-migrate.readthedocs.io/)
+- [Flask-Smorest — documentação](https://flask-smorest.readthedocs.io/)
+- [Docker Compose — documentação](https://docs.docker.com/compose/)
+- [Next.js — instalação](https://nextjs.org/docs/app/getting-started/installation)
+- [Next.js — rewrites](https://nextjs.org/docs/app/api-reference/config/next-config-js/rewrites)
+- [shadcn/ui — instalação para Next.js](https://ui.shadcn.com/docs/installation/next)
+- [shadcn/ui — componentes](https://ui.shadcn.com/docs/components)
